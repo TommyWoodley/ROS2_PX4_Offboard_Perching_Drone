@@ -97,6 +97,12 @@ class OffboardControl(Node):
             '/arm_message',
             self.arm_message_callback,
             qos_profile)
+        
+        self.my_bool_sub = self.create_subscription(
+            Bool,
+            '/confirm_message',
+            self.confirm_message_callback,
+            qos_profile)
 
 
         #Create publishers
@@ -131,6 +137,7 @@ class OffboardControl(Node):
         self.max_minor_steps = int(10.0 / timer_period)
         self.arm_message = False
         self.failsafe = False
+        self.confirm = False
 
         self.target_position = Vector3()
         self.target_position.x = 0.0
@@ -148,11 +155,19 @@ class OffboardControl(Node):
             "ARMING": self.state_arming,
             "TAKEOFF": self.state_takeoff,
             "LOITER": self.state_loiter,
-            "OFFBOARD": self.state_offboard,
-            "OFFBOARD_START": self.state_offboard,
-            "OFFBOARD_TRAJ_1": self.state_offboard,
-            "OFFBOARD_TRAJ_2": self.state_offboard
+            "OFFBOARD": self.state_offboard
         }
+
+        self.traj_states = [
+            "WAITING",
+            "MOVE_TO_START",
+            "TRAJ_1",
+            "TRAJ_2",
+            "DONE"
+        ]
+        
+        self.current_traj_state = "WAITING"
+
         self.current_state = "IDLE"
         self.last_state = self.current_state
 
@@ -171,6 +186,10 @@ class OffboardControl(Node):
     def arm_message_callback(self, msg):
         self.arm_message = msg.data
         self.get_logger().info(f"Arm Message: {self.arm_message}")
+    
+    def confirm_message_callback(self, msg):
+        self.confirm = msg.data
+        self.get_logger().info(f"Confirm Message: {self.confirm}")
 
     #callback function that arms, takes off, and switches to offboard mode
     #implements a finite state machine
@@ -369,16 +388,41 @@ class OffboardControl(Node):
             trajectory_msg.yaw = float('nan')
             trajectory_msg.yawspeed = float('nan')
 
-            if self.step_counter < self.starting_position_steps:
+            if self.current_traj_state == "WAITING":
+                if self.confirm:
+                    self.current_traj_state = "MOVE_TO_START"
+                    self.confirm = False
+            
+
+            elif self.current_traj_state == "MOVE_TO_START":
                 position = self.data.iloc[0]
-                self.step_counter += 1
-            elif self.csv_index < len(self.data):
+                
+                if self.confirm: # Confirmed at starting position
+                    self.current_traj_state = "TRAJ_1"
+                    self.confirm = False
+            
+            elif self.current_traj_state == "TRAJ_1":
                 position = self.data.iloc[self.csv_index]
-                self.csv_index += 3
-            else:
+
+                if position['phase'] == 0.0:
+                    self.csv_index += 1
+                elif self.confirm: # In second stage and confirmed wrapping
+                    self.current_traj_state = "TRAJ_2"
+                    self.confirm = False
+            
+            elif self.current_traj_state == "TRAJ_2":
+                position = self.data.iloc[self.csv_index]
+                self.csv_index += 1
+
+                if self.csv_index >= len(self.data):
+                    self.current_traj_state = "DONE"
+            
+            elif self.current_traj_state == "DONE":
                 self.get_logger().info("Completed the trajectory!")
                 return
-            self.get_logger().info(f"Step Counter {self.step_counter}, CSV Index: {self.csv_index}")
+            
+            else:
+                self.get_logger().info("Ended the trajectory!")
             
             trajectory_msg.position[0] = position['x']
             trajectory_msg.position[1] = position['y']
