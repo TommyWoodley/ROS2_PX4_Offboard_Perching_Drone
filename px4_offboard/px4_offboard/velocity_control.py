@@ -150,8 +150,9 @@ class OffboardControl(Node):
 
         self.target_position = Vector3()
         self.target_position.x = 0.0
-        self.target_position.y = 3.0
-        self.target_position.z = 3.0
+        self.target_position.y = 0.0
+        self.target_position.z = 0.0
+        self.phase_one = True
 
         self.prev_position = Vector3()
         self.prev_position.x = 0.0
@@ -371,25 +372,24 @@ class OffboardControl(Node):
         self.vehicle_local_velocity[0] = msg.vx
         self.vehicle_local_velocity[1] = -msg.vy
         self.vehicle_local_velocity[2] = -msg.vz
-
-    def get_next_target_position(self):
-        target_position = Vector3()
-        target_position.x = 0.0
-        target_position.y = 3.0
-        target_position.z = 3.0
-
-        return target_position
     
     def has_reached_position(self, target_position, threshold=0.2):
         
         current_position = self.vehicle_local_position
         distance = np.sqrt(
-            (current_position[0] - target_position[0]) ** 2 +
-            (current_position[1] - target_position[1]) ** 2 +
-            (current_position[2] - target_position[2]) ** 2
+            (current_position[0] - target_position.x) ** 2 +
+            (current_position[1] - target_position.y) ** 2 +
+            (-current_position[2] - target_position.z) ** 2
         )
         self.get_logger().info(f"Aim {target_position}, current: {current_position}, distance: {distance}")
         return distance < threshold
+    
+    def set_target_pos(self, position):
+        self.get_logger().info(f"Setting target position z:{position['x']}, y:{position['y']}, z:{position['z']}")
+        self.target_position.x = float(position['x'])
+        self.target_position.y = float(position['y'])
+        self.target_position.z = - float(position['z'])
+
         
     #publishes offboard control modes and velocity as trajectory setpoints
     def cmdloop_callback(self):
@@ -421,34 +421,34 @@ class OffboardControl(Node):
                 if self.confirm:
                     self.current_traj_state = "MOVE_TO_START"
                     self.confirm = False
+                    self.set_target_pos(self.data.iloc[0])
                 return
             
 
             elif self.current_traj_state == "MOVE_TO_START":
-                position = self.data.iloc[0]
-                
-                if self.confirm: # Confirmed at starting position
+                if self.confirm: # Confirmed at starting position TODO: Has reached target position
                     self.current_traj_state = "TRAJ_1"
                     self.confirm = False
             
             elif self.current_traj_state == "TRAJ_1":
-                position = self.data.iloc[self.csv_index]
-
-                if self.has_reached_position(np.array([position['x'], position['y'], position['z']])):
-                    if position['h'] == False:
+                if self.has_reached_position(self.target_position):
+                    if self.phase_one:
                         self.csv_index += 1
+                        self.set_target_pos(self.data.iloc[self.csv_index])
+                        self.phase_one = bool(self.data.iloc[self.csv_index]['h'] == False)
+
                     elif self.confirm:
                         self.current_traj_state = "TRAJ_2"
                         self.confirm = False
             
             elif self.current_traj_state == "TRAJ_2":
-                position = self.data.iloc[self.csv_index]
-
-                if self.has_reached_position(np.array([position['x'], position['y'], position['z']])):
+                if self.has_reached_position(self.target_position):
                     self.csv_index += 1
 
                     if self.csv_index >= len(self.data):
                         self.current_traj_state = "DONE"
+                    else:
+                        self.set_target_pos(self.data.iloc[self.csv_index])
             
             elif self.current_traj_state == "DONE":
                 self.get_logger().info("Completed the trajectory!")
@@ -457,9 +457,9 @@ class OffboardControl(Node):
             else:
                 self.get_logger().info("Ended the trajectory!")
             
-            trajectory_msg.position[0] = position['x']
-            trajectory_msg.position[1] = position['y']
-            trajectory_msg.position[2] = - position['z']
+            trajectory_msg.position[0] = self.target_position.x
+            trajectory_msg.position[1] = self.target_position.y
+            trajectory_msg.position[2] = self.target_position.z
             trajectory_msg.velocity[0] = float('nan')
             trajectory_msg.velocity[1] = float('nan')
             trajectory_msg.velocity[2] = float('nan')
