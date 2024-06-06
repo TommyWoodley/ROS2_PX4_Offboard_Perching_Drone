@@ -64,7 +64,7 @@ class OffboardControl(Node):
             depth=1
         )
 
-        csv_file = "/home/tommywoodley/ros2_px4_offboard_example_ws/src/ROS2_PX4_Offboard_Perching_Drone/px4_offboard/px4_offboard/log_1716809570.csv"
+        csv_file = "/home/tommywoodley/ros2_px4_offboard_example_ws/src/ROS2_PX4_Offboard_Perching_Drone/px4_offboard/px4_offboard/traj_files/trajectory_1.csv"
 
         self.load_csv(csv_file)
 
@@ -379,6 +379,17 @@ class OffboardControl(Node):
         target_position.z = 3.0
 
         return target_position
+    
+    def has_reached_position(self, target_position, threshold=0.2):
+        
+        current_position = self.vehicle_local_position
+        distance = np.sqrt(
+            (current_position[0] - target_position[0]) ** 2 +
+            (current_position[1] - target_position[1]) ** 2 +
+            (current_position[2] - target_position[2]) ** 2
+        )
+        self.get_logger().info(f"Aim {target_position}, current: {current_position}, distance: {distance}")
+        return distance < threshold
         
     #publishes offboard control modes and velocity as trajectory setpoints
     def cmdloop_callback(self):
@@ -423,18 +434,21 @@ class OffboardControl(Node):
             elif self.current_traj_state == "TRAJ_1":
                 position = self.data.iloc[self.csv_index]
 
-                if position['phase'] == 0.0:
-                    self.csv_index += 1
-                elif self.confirm: # In second stage and confirmed wrapping
-                    self.current_traj_state = "TRAJ_2"
-                    self.confirm = False
+                if self.has_reached_position(np.array([position['x'], position['y'], position['z']])):
+                    if position['h'] == False:
+                        self.csv_index += 1
+                    elif self.confirm:
+                        self.current_traj_state = "TRAJ_2"
+                        self.confirm = False
             
             elif self.current_traj_state == "TRAJ_2":
                 position = self.data.iloc[self.csv_index]
-                self.csv_index += 1
 
-                if self.csv_index >= len(self.data):
-                    self.current_traj_state = "DONE"
+                if self.has_reached_position(np.array([position['x'], position['y'], position['z']])):
+                    self.csv_index += 1
+
+                    if self.csv_index >= len(self.data):
+                        self.current_traj_state = "DONE"
             
             elif self.current_traj_state == "DONE":
                 self.get_logger().info("Completed the trajectory!")
