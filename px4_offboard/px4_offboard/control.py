@@ -42,6 +42,14 @@ moveBindings = {
     '\x1b[C' : (-1, 0, 0, 0), #Right Arrow
     '\x1b[D' : (1, 0, 0, 0),  #Left Arrow
 }
+states = [
+    "CONFIRM_MOVE_TO_START",
+    "MOVE_TO_START",
+    "CONFIRM_START_TRAJ",
+    "TRAJ_PART_1",
+    "CONFIRM_HANGING",
+    "TRAJ_PART_2",
+]
 
 
 speedBindings = {
@@ -106,6 +114,8 @@ def main():
     arm_toggle = False
     arm_pub = node.create_publisher(std_msgs.msg.Bool, '/arm_message', qos_profile)
 
+    confirm_pub = node.create_publisher(std_msgs.msg.Bool, '/confirm_message', qos_profile)
+
 
     speed = 0.5
     turn = .2
@@ -149,6 +159,11 @@ def main():
                 arm_msg.data = arm_toggle
                 arm_pub.publish(arm_msg)
                 print(f"Arm toggle is now: {arm_toggle}")
+            
+            if key == 'p': # Confirmation Key
+                confirm_msg = std_msgs.msg.Bool()
+                confirm_msg.data = True
+                confirm_pub.publish(confirm_msg)
 
             pose = geometry_msgs.msg.Pose()
             

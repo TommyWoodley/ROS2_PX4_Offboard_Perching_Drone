@@ -122,8 +122,20 @@ class OffboardControl(Node):
         self.offboardMode = False
         self.flightCheck = False
         self.myCnt = 0
+        self.minor_steps = 0
+        self.max_minor_steps = int(10.0 / timer_period)
         self.arm_message = False
         self.failsafe = False
+
+        self.target_position = Vector3()
+        self.target_position.x = 0.0
+        self.target_position.y = 3.0
+        self.target_position.z = 3.0
+
+        self.prev_position = Vector3()
+        self.prev_position.x = 0.0
+        self.prev_position.y = 0.0
+        self.prev_position.z = 2.0
 
         #states with corresponding callback functions that run once when state switches
         self.states = {
@@ -131,7 +143,10 @@ class OffboardControl(Node):
             "ARMING": self.state_arming,
             "TAKEOFF": self.state_takeoff,
             "LOITER": self.state_loiter,
-            "OFFBOARD": self.state_offboard
+            "OFFBOARD": self.state_offboard,
+            "OFFBOARD_START": self.state_offboard,
+            "OFFBOARD_TRAJ_1": self.state_offboard,
+            "OFFBOARD_TRAJ_2": self.state_offboard
         }
         self.current_state = "IDLE"
         self.last_state = self.current_state
@@ -206,7 +221,7 @@ class OffboardControl(Node):
 
     def state_takeoff(self):
         self.myCnt = 0
-        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, param1 = 1.0, param7=5.0) # param7 is altitude in meters
+        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, param1 = 1.0, param7=2.0) # param7 is altitude in meters
         self.get_logger().info("Takeoff command send")
 
     def state_loiter(self):
@@ -230,7 +245,7 @@ class OffboardControl(Node):
 
     # Takes off the vehicle to a user specified altitude (meters)
     def take_off(self):
-        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, param1 = 1.0, param7=5.0) # param7 is altitude in meters
+        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, param1 = 1.0, param7=2.0) # param7 is altitude in meters
         self.get_logger().info("Takeoff command send")
 
     #publishes command to /fmu/in/vehicle_command
@@ -303,10 +318,37 @@ class OffboardControl(Node):
         #trueYaw is the drones current yaw value
         self.trueYaw = -(np.arctan2(2.0*(orientation_q[3]*orientation_q[0] + orientation_q[1]*orientation_q[2]), 
                                   1.0 - 2.0*(orientation_q[0]*orientation_q[0] + orientation_q[1]*orientation_q[1])))
+    
+    def get_next_target_position(self):
+        target_position = Vector3()
+        target_position.x = 0.0
+        target_position.y = 3.0
+        target_position.z = 3.0
+
+        return target_position
         
     #publishes offboard control modes and velocity as trajectory setpoints
     def cmdloop_callback(self):
         if(self.offboardMode == True):
+            self.minor_steps += 1
+
+            if self.minor_steps > self.max_minor_steps:
+                self.prev_position = self.target_position
+                self.target_position = self.get_next_target_position()
+                self.minor_steps = 0
+            
+            distance = Vector3()
+            distance.x = ((self.prev_position.x - self.target_position.x) / self.max_minor_steps) * self.minor_steps
+            distance.y = ((self.prev_position.y - self.target_position.y) / self.max_minor_steps) * self.minor_steps
+            distance.z = ((self.prev_position.z - self.target_position.z) / self.max_minor_steps) * self.minor_steps
+
+            next_position = Vector3()
+            next_position.x = self.prev_position.x + distance.x
+            next_position.y = self.prev_position.y + distance.y
+            next_position.z = self.prev_position.z + distance.z
+
+            self.get_logger().info(f"Offboard Minor: {self.minor_steps}, Target: {next_position}")
+    
             # Publish offboard control modes
             offboard_msg = OffboardControlMode()
             offboard_msg.timestamp = int(Clock().now().nanoseconds / 1000)
@@ -328,9 +370,9 @@ class OffboardControl(Node):
                 trajectory_msg.velocity[0] = float('nan')
                 trajectory_msg.velocity[1] = float('nan')
                 trajectory_msg.velocity[2] = float('nan')
-                trajectory_msg.position[0] = self.position.x
-                trajectory_msg.position[1] = self.position.y
-                trajectory_msg.position[2] = self.position.z
+                trajectory_msg.position[0] = next_position.x
+                trajectory_msg.position[1] = next_position.y
+                trajectory_msg.position[2] = next_position.z
             else:
                 trajectory_msg.velocity[0] = velocity_world_x
                 trajectory_msg.velocity[1] = velocity_world_y
