@@ -46,7 +46,7 @@ from px4_msgs.msg import TrajectorySetpoint
 from px4_msgs.msg import VehicleStatus
 from px4_msgs.msg import VehicleAttitude
 from px4_msgs.msg import VehicleCommand
-from geometry_msgs.msg import Twist, Vector3
+from geometry_msgs.msg import Twist, Vector3, Pose
 from math import pi
 from std_msgs.msg import Bool
 
@@ -73,6 +73,12 @@ class OffboardControl(Node):
             Twist,
             '/offboard_velocity_cmd',
             self.offboard_velocity_callback,
+            qos_profile)
+        
+        self.offboard_position_sub = self.create_subscription(
+            Pose,
+            '/offboard_position_cmd',
+            self.offboard_position_callback,
             qos_profile)
         
         self.attitude_sub = self.create_subscription(
@@ -109,6 +115,8 @@ class OffboardControl(Node):
         self.nav_state = VehicleStatus.NAVIGATION_STATE_MAX
         self.arm_state = VehicleStatus.ARMING_STATE_ARMED
         self.velocity = Vector3()
+        self.position = Vector3()
+        self.position_mode = True
         self.yaw = 0.0  #yaw value we send as command
         self.trueYaw = 0.0  #current yaw value of drone
         self.offboardMode = False
@@ -260,9 +268,16 @@ class OffboardControl(Node):
         self.failsafe = msg.failsafe
         self.flightCheck = msg.pre_flight_checks_pass
 
+    def offboard_position_callback(self, msg):
+        self.position_mode = True
+        self.position.x = - msg.position.y
+        self.position.y = msg.position.x
+        self.position.z = - msg.position.z
+
 
     #receives Twist commands from Teleop and converts NED -> FLU
     def offboard_velocity_callback(self, msg):
+        self.position_mode = False
         #implements NED -> FLU Transformation
         self.velocity.x = -msg.linear.y
         self.velocity.y = msg.linear.x
@@ -295,8 +310,8 @@ class OffboardControl(Node):
             # Publish offboard control modes
             offboard_msg = OffboardControlMode()
             offboard_msg.timestamp = int(Clock().now().nanoseconds / 1000)
-            offboard_msg.position = False
-            offboard_msg.velocity = True
+            offboard_msg.position = self.position_mode
+            offboard_msg.velocity = not self.position_mode
             offboard_msg.acceleration = False
             self.publisher_offboard_mode.publish(offboard_msg)            
 
@@ -309,12 +324,21 @@ class OffboardControl(Node):
             # Create and publish TrajectorySetpoint message with NaN values for position and acceleration
             trajectory_msg = TrajectorySetpoint()
             trajectory_msg.timestamp = int(Clock().now().nanoseconds / 1000)
-            trajectory_msg.velocity[0] = velocity_world_x
-            trajectory_msg.velocity[1] = velocity_world_y
-            trajectory_msg.velocity[2] = self.velocity.z
-            trajectory_msg.position[0] = float('nan')
-            trajectory_msg.position[1] = float('nan')
-            trajectory_msg.position[2] = float('nan')
+            if self.position_mode:
+                trajectory_msg.velocity[0] = float('nan')
+                trajectory_msg.velocity[1] = float('nan')
+                trajectory_msg.velocity[2] = float('nan')
+                trajectory_msg.position[0] = self.position.x
+                trajectory_msg.position[1] = self.position.y
+                trajectory_msg.position[2] = self.position.z
+            else:
+                trajectory_msg.velocity[0] = velocity_world_x
+                trajectory_msg.velocity[1] = velocity_world_y
+                trajectory_msg.velocity[2] = self.velocity.z
+                trajectory_msg.position[0] = float('nan')
+                trajectory_msg.position[1] = float('nan')
+                trajectory_msg.position[2] = float('nan')
+
             trajectory_msg.acceleration[0] = float('nan')
             trajectory_msg.acceleration[1] = float('nan')
             trajectory_msg.acceleration[2] = float('nan')

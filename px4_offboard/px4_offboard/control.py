@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import sys
+import time
+import logging
 
 import geometry_msgs.msg
 import rclpy
@@ -99,7 +101,7 @@ def main():
     )
 
 
-    pub = node.create_publisher(geometry_msgs.msg.Twist, '/offboard_velocity_cmd', qos_profile)
+    pub = node.create_publisher(geometry_msgs.msg.Pose, '/offboard_position_cmd', qos_profile)
 
     arm_toggle = False
     arm_pub = node.create_publisher(std_msgs.msg.Bool, '/arm_message', qos_profile)
@@ -116,6 +118,11 @@ def main():
     y_val = 0.0
     z_val = 0.0
     yaw_val = 0.0
+
+    log_file_path = "/home/tommywoodley/ros2_px4_offboard_example_ws/src/ROS2_PX4_Offboard_Perching_Drone/px4_offboard/px4_offboard/log.txt"
+    logging.basicConfig(filename=log_file_path, level=logging.DEBUG)
+
+    logging.info("Starting the teleop_twist_keyboard node")
 
     try:
         print(msg)
@@ -143,34 +150,32 @@ def main():
                 arm_pub.publish(arm_msg)
                 print(f"Arm toggle is now: {arm_toggle}")
 
-            twist = geometry_msgs.msg.Twist()
+            pose = geometry_msgs.msg.Pose()
             
             x_val = (x * speed) + x_val
             y_val = (y * speed) + y_val
             z_val = (z * speed) + z_val
             yaw_val = (th * turn) + yaw_val
-            twist.linear.x = x_val
-            twist.linear.y = y_val
-            twist.linear.z = z_val
-            twist.angular.x = 0.0
-            twist.angular.y = 0.0
-            twist.angular.z = yaw_val
-            pub.publish(twist)
-            print("X:",twist.linear.x, "   Y:",twist.linear.y, "   Z:",twist.linear.z, "   Yaw:",twist.angular.z)
+
+            pose.position.x = x_val
+            pose.position.y = y_val
+            pose.position.z = z_val
+
+       
+            pub.publish(pose)
+            print("X:",pose.position.x, "   Y:", pose.position.y, "   Z:", pose.position.z, "   Yaw:")
             
 
     except Exception as e:
+        logging.error("Exception occurred", exc_info=True)
         print(e)
 
     finally:
-        twist = geometry_msgs.msg.Twist()
-        twist.linear.x = 0.0
-        twist.linear.y = 0.0
-        twist.linear.z = 0.0
-        twist.angular.x = 0.0
-        twist.angular.y = 0.0
-        twist.angular.z = 0.0
-        pub.publish(twist)
+        pose = geometry_msgs.msg.Pose()
+        pose.position.x = 0.0
+        pose.position.y = 0.0
+        pose.position.z = 0.0
+        pub.publish(pose)
 
         restoreTerminalSettings(settings)
 
