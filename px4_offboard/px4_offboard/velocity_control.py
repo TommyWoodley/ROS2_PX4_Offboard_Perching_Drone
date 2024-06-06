@@ -47,6 +47,7 @@ from px4_msgs.msg import TrajectorySetpoint
 from px4_msgs.msg import VehicleStatus
 from px4_msgs.msg import VehicleAttitude
 from px4_msgs.msg import VehicleCommand
+from px4_msgs.msg import VehicleLocalPosition
 from geometry_msgs.msg import Twist, Vector3, Pose
 from math import pi
 from std_msgs.msg import Bool
@@ -103,6 +104,12 @@ class OffboardControl(Node):
             '/confirm_message',
             self.confirm_message_callback,
             qos_profile)
+        
+        self.local_position_sub = self.create_subscription(
+            VehicleLocalPosition,
+            '/fmu/out/vehicle_local_position',
+            self.vehicle_local_position_callback,
+            qos_profile)
 
 
         #Create publishers
@@ -138,6 +145,8 @@ class OffboardControl(Node):
         self.arm_message = False
         self.failsafe = False
         self.confirm = False
+        self.vehicle_local_position = np.array([0.0, 0.0, 0.0])
+        self.vehicle_local_velocity = np.array([0.0, 0.0, 0.0])
 
         self.target_position = Vector3()
         self.target_position.x = 0.0
@@ -354,6 +363,15 @@ class OffboardControl(Node):
         self.trueYaw = -(np.arctan2(2.0*(orientation_q[3]*orientation_q[0] + orientation_q[1]*orientation_q[2]), 
                                   1.0 - 2.0*(orientation_q[0]*orientation_q[0] + orientation_q[1]*orientation_q[1])))
     
+    def vehicle_local_position_callback(self, msg):
+        # TODO: handle NED->ENU transformation 
+        self.vehicle_local_position[0] = msg.x
+        self.vehicle_local_position[1] = -msg.y
+        self.vehicle_local_position[2] = -msg.z
+        self.vehicle_local_velocity[0] = msg.vx
+        self.vehicle_local_velocity[1] = -msg.vy
+        self.vehicle_local_velocity[2] = -msg.vz
+
     def get_next_target_position(self):
         target_position = Vector3()
         target_position.x = 0.0
@@ -392,6 +410,7 @@ class OffboardControl(Node):
                 if self.confirm:
                     self.current_traj_state = "MOVE_TO_START"
                     self.confirm = False
+                return
             
 
             elif self.current_traj_state == "MOVE_TO_START":
