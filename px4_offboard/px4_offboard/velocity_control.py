@@ -38,6 +38,7 @@ __contact__ = "braden@arkelectron.com"
 import rclpy
 from rclpy.node import Node
 import numpy as np
+import pandas as pd
 from rclpy.clock import Clock
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 
@@ -61,6 +62,10 @@ class OffboardControl(Node):
             history=QoSHistoryPolicy.RMW_QOS_POLICY_HISTORY_KEEP_LAST,
             depth=1
         )
+
+        csv_file = "/home/tommywoodley/ros2_px4_offboard_example_ws/src/ROS2_PX4_Offboard_Perching_Drone/px4_offboard/px4_offboard/log_1716809570.csv"
+
+        self.load_csv(csv_file)
 
         #Create subscriptions
         self.status_sub = self.create_subscription(
@@ -150,6 +155,17 @@ class OffboardControl(Node):
         }
         self.current_state = "IDLE"
         self.last_state = self.current_state
+
+        self.step_counter = 0
+        self.csv_index = 0
+        self.starting_position_steps = 1000
+    
+    def load_csv(self, csv_file):
+        try:
+            self.data = pd.read_csv(csv_file)
+            self.get_logger().info(f"CSV data loaded successfully:\n{self.data.head()}")
+        except Exception as e:
+            self.get_logger().error(f"Failed to load CSV file: {e}")
 
 
     def arm_message_callback(self, msg):
@@ -330,25 +346,6 @@ class OffboardControl(Node):
     #publishes offboard control modes and velocity as trajectory setpoints
     def cmdloop_callback(self):
         if(self.offboardMode == True):
-            self.minor_steps += 1
-
-            if self.minor_steps > self.max_minor_steps:
-                self.prev_position = self.target_position
-                self.target_position = self.get_next_target_position()
-                self.minor_steps = 0
-            
-            distance = Vector3()
-            distance.x = ((self.prev_position.x - self.target_position.x) / self.max_minor_steps) * self.minor_steps
-            distance.y = ((self.prev_position.y - self.target_position.y) / self.max_minor_steps) * self.minor_steps
-            distance.z = ((self.prev_position.z - self.target_position.z) / self.max_minor_steps) * self.minor_steps
-
-            next_position = Vector3()
-            next_position.x = self.prev_position.x + distance.x
-            next_position.y = self.prev_position.y + distance.y
-            next_position.z = self.prev_position.z + distance.z
-
-            self.get_logger().info(f"Offboard Minor: {self.minor_steps}, Target: {next_position}")
-    
             # Publish offboard control modes
             offboard_msg = OffboardControlMode()
             offboard_msg.timestamp = int(Clock().now().nanoseconds / 1000)
@@ -366,26 +363,29 @@ class OffboardControl(Node):
             # Create and publish TrajectorySetpoint message with NaN values for position and acceleration
             trajectory_msg = TrajectorySetpoint()
             trajectory_msg.timestamp = int(Clock().now().nanoseconds / 1000)
-            if self.position_mode:
-                trajectory_msg.velocity[0] = float('nan')
-                trajectory_msg.velocity[1] = float('nan')
-                trajectory_msg.velocity[2] = float('nan')
-                trajectory_msg.position[0] = next_position.x
-                trajectory_msg.position[1] = next_position.y
-                trajectory_msg.position[2] = next_position.z
-            else:
-                trajectory_msg.velocity[0] = velocity_world_x
-                trajectory_msg.velocity[1] = velocity_world_y
-                trajectory_msg.velocity[2] = self.velocity.z
-                trajectory_msg.position[0] = float('nan')
-                trajectory_msg.position[1] = float('nan')
-                trajectory_msg.position[2] = float('nan')
-
             trajectory_msg.acceleration[0] = float('nan')
             trajectory_msg.acceleration[1] = float('nan')
             trajectory_msg.acceleration[2] = float('nan')
             trajectory_msg.yaw = float('nan')
-            trajectory_msg.yawspeed = self.yaw
+            trajectory_msg.yawspeed = float('nan')
+
+            if self.step_counter < self.starting_position_steps:
+                position = self.data.iloc[0]
+                self.step_counter += 1
+            elif self.csv_index < len(self.data):
+                position = self.data.iloc[self.csv_index]
+                self.csv_index += 3
+            else:
+                self.get_logger().info("Completed the trajectory!")
+                return
+            self.get_logger().info(f"Step Counter {self.step_counter}, CSV Index: {self.csv_index}")
+            
+            trajectory_msg.position[0] = position['x']
+            trajectory_msg.position[1] = position['y']
+            trajectory_msg.position[2] = - position['z']
+            trajectory_msg.velocity[0] = float('nan')
+            trajectory_msg.velocity[1] = float('nan')
+            trajectory_msg.velocity[2] = float('nan')
 
             self.publisher_trajectory.publish(trajectory_msg)
 
