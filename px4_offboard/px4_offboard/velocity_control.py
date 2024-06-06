@@ -158,7 +158,9 @@ class OffboardControl(Node):
         self.target_velocity.y = float('nan')
         self.target_velocity.z = float('nan')
         self.phase_one = True
-        self.time_period = 1.0
+        ########################################### CONTROLS EFFECTIVE SPEED OF DRONE - SET TO VERY VERY SLOW
+        self.time_period = 0.2
+        ########################################### CONTROLS EFFECTIVE SPEED OF DRONE - SET TO VERY VERY SLOW
         self.time_steps = int(self.time_period / timer_period)
         self.current_time_steps = 0
 

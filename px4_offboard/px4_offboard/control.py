@@ -18,18 +18,15 @@ else:
 
 msg = """
 This node takes keypresses from the keyboard and publishes them
-as Twist messages. 
-Using the arrow keys and WASD you have Mode 2 RC controls.
-W: Up
-S: Down
-A: Yaw Left
-D: Yaw Right
-Up Arrow: Pitch Forward
-Down Arrow: Pitch Backward
-Left Arrow: Roll Left
-Right Arrow: Roll Right
+to the main controller
 
 Press SPACE to arm/disarm the drone
+
+Then the drone will take off:
+Confrim takeoff with 'p' key
+
+Confirm reached starting position with 'p' key
+Confirm hanging with 'p' key
 """
 
 moveBindings = {
@@ -132,7 +129,7 @@ def main():
     log_file_path = "/home/tommywoodley/ros2_px4_offboard_example_ws/src/ROS2_PX4_Offboard_Perching_Drone/px4_offboard/px4_offboard/log.txt"
     logging.basicConfig(filename=log_file_path, level=logging.DEBUG)
 
-    logging.info("Starting the teleop_twist_keyboard node")
+    # logging.info("Starting the teleop_twist_keyboard node")
 
     try:
         print(msg)
@@ -178,7 +175,7 @@ def main():
 
        
             pub.publish(pose)
-            print("X:",pose.position.x, "   Y:", pose.position.y, "   Z:", pose.position.z, "   Yaw:")
+            # print("X:",pose.position.x, "   Y:", pose.position.y, "   Z:", pose.position.z, "   Yaw:")
             
 
     except Exception as e:
