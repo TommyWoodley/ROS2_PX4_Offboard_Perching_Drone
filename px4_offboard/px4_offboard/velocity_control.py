@@ -128,6 +128,7 @@ class OffboardControl(Node):
         # period is arbitrary, just should be more than 2Hz. Because live controls rely on this, a higher frequency is recommended
         # commands in cmdloop_callback won't be executed if the vehicle is not in offboard mode
         timer_period = 0.02  # seconds
+        self.timer_period = timer_period
         self.timer = self.create_timer(timer_period, self.cmdloop_callback)
 
         self.nav_state = VehicleStatus.NAVIGATION_STATE_MAX
@@ -152,7 +153,14 @@ class OffboardControl(Node):
         self.target_position.x = 0.0
         self.target_position.y = 0.0
         self.target_position.z = 0.0
+        self.target_velocity = Vector3()
+        self.target_velocity.x = float('nan')
+        self.target_velocity.y = float('nan')
+        self.target_velocity.z = float('nan')
         self.phase_one = True
+        self.time_period = 1.0
+        self.time_steps = int(self.time_period / timer_period)
+        self.current_time_steps = 0
 
         self.prev_position = Vector3()
         self.prev_position.x = 0.0
@@ -373,7 +381,7 @@ class OffboardControl(Node):
         self.vehicle_local_velocity[1] = -msg.vy
         self.vehicle_local_velocity[2] = -msg.vz
     
-    def has_reached_position(self, target_position, threshold=0.2):
+    def has_reached_position(self, target_position, threshold=0.4):
         
         current_position = self.vehicle_local_position
         distance = np.sqrt(
@@ -381,14 +389,38 @@ class OffboardControl(Node):
             (current_position[1] - target_position.y) ** 2 +
             (-current_position[2] - target_position.z) ** 2
         )
-        self.get_logger().info(f"Aim {target_position}, current: {current_position}, distance: {distance}")
+        self.get_logger().info(f"Aim {target_position}, current: {current_position}, distance: {distance}, time: {self.time_steps}")
         return distance < threshold
     
-    def set_target_pos(self, position):
+    def set_target_pos(self, position, update_velocity=True):
         self.get_logger().info(f"Setting target position z:{position['x']}, y:{position['y']}, z:{position['z']}")
         self.target_position.x = float(position['x'])
         self.target_position.y = float(position['y'])
         self.target_position.z = - float(position['z'])
+        self.current_time_steps = 0
+
+        if update_velocity:
+            self.update_target_velocity()
+
+    
+    def update_target_velocity(self):
+
+        time = (self.time_steps - self.current_time_steps) * self.timer_period
+
+        distance_x = self.target_position.x - self.vehicle_local_position[0]
+        distance_y = self.target_position.y - self.vehicle_local_position[1]
+        distance_z = self.target_position.z + self.vehicle_local_position[2]
+
+        if time is not None and time >= (self.time_period / 3):
+            self.target_velocity.x = distance_x / time
+            self.target_velocity.y = distance_y / time
+            self.target_velocity.z = distance_z / time
+        else:
+            self.target_velocity.x = float('nan')
+            self.target_velocity.y = float('nan')
+            self.target_velocity.z = float('nan')
+        
+        return time
 
         
     #publishes offboard control modes and velocity as trajectory setpoints
@@ -397,8 +429,8 @@ class OffboardControl(Node):
             # Publish offboard control modes
             offboard_msg = OffboardControlMode()
             offboard_msg.timestamp = int(Clock().now().nanoseconds / 1000)
-            offboard_msg.position = self.position_mode
-            offboard_msg.velocity = not self.position_mode
+            offboard_msg.position = True
+            offboard_msg.velocity = True
             offboard_msg.acceleration = False
             self.publisher_offboard_mode.publish(offboard_msg)            
 
@@ -421,7 +453,7 @@ class OffboardControl(Node):
                 if self.confirm:
                     self.current_traj_state = "MOVE_TO_START"
                     self.confirm = False
-                    self.set_target_pos(self.data.iloc[0])
+                    self.set_target_pos(self.data.iloc[0], update_velocity=False)
                 return
             
 
@@ -431,6 +463,10 @@ class OffboardControl(Node):
                     self.confirm = False
             
             elif self.current_traj_state == "TRAJ_1":
+                time = self.update_target_velocity()
+                self.current_time_steps += 1
+                if time < 0:
+                    self.get_logger().error(f"Out of time to reach next position time:{time}")
                 if self.has_reached_position(self.target_position):
                     if self.phase_one:
                         self.csv_index += 1
@@ -442,6 +478,11 @@ class OffboardControl(Node):
                         self.confirm = False
             
             elif self.current_traj_state == "TRAJ_2":
+                time = self.update_target_velocity()
+                self.current_time_steps += 1
+                if time < 0:
+                    self.get_logger().error(f"Out of time to reach next position time:{time}")
+
                 if self.has_reached_position(self.target_position):
                     self.csv_index += 1
 
@@ -460,9 +501,11 @@ class OffboardControl(Node):
             trajectory_msg.position[0] = self.target_position.x
             trajectory_msg.position[1] = self.target_position.y
             trajectory_msg.position[2] = self.target_position.z
-            trajectory_msg.velocity[0] = float('nan')
-            trajectory_msg.velocity[1] = float('nan')
-            trajectory_msg.velocity[2] = float('nan')
+            trajectory_msg.velocity[0] = self.target_velocity.x
+            trajectory_msg.velocity[1] = self.target_velocity.y
+            trajectory_msg.velocity[2] = self.target_velocity.z
+
+            self.get_logger().info(f"MEssage Sending: {trajectory_msg}")
 
             self.publisher_trajectory.publish(trajectory_msg)
 
