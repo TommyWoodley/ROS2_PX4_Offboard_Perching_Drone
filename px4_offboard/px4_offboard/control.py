@@ -126,9 +126,6 @@ def main():
     z_val = 0.0
     yaw_val = 0.0
 
-    log_file_path = "/home/tommywoodley/ros2_px4_offboard_example_ws/src/ROS2_PX4_Offboard_Perching_Drone/px4_offboard/px4_offboard/log.txt"
-    logging.basicConfig(filename=log_file_path, level=logging.DEBUG)
-
     # logging.info("Starting the teleop_twist_keyboard node")
 
     try:
