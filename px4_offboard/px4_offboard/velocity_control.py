@@ -399,7 +399,7 @@ class OffboardControl(Node):
         self.get_logger().info(f"Setting target position z:{position['x']}, y:{position['y']}, z:{position['z']}")
         self.target_position.x = float(position['x'])    # Puts bar at 0
         self.target_position.y = float(position['y'])    # Puts bar at 0
-        self.target_position.z = - float(position['z'])  # Puts the bar at 2.7
+        self.target_position.z = - float(position['z']) + 1.2 # Puts the bar at 2.7
         self.current_time_steps = 0
 
         if update_velocity:
