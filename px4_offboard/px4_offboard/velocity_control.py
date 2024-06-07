@@ -396,10 +396,11 @@ class OffboardControl(Node):
         return distance < threshold
     
     def set_target_pos(self, position, update_velocity=True):
-        self.get_logger().info(f"Setting target position z:{position['x']}, y:{position['y']}, z:{position['z']}")
-        self.target_position.x = float(position['x'])    # Puts bar at 0
+        
+        self.target_position.x = float(position['x'] - 2.0)    # Puts bar at 0
         self.target_position.y = float(position['y'])    # Puts bar at 0
-        self.target_position.z = - float(position['z']) + 1.2 # Puts the bar at 2.7
+        self.target_position.z = - float(position['z']) + 0.7 # Puts the bar at 2.7
+        self.get_logger().info(f"Setting target position {self.target_position} | {position['x']} | {position['y']}")
         self.current_time_steps = 0
 
         if update_velocity:
