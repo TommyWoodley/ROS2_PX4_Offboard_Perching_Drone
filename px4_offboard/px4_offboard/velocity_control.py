@@ -64,7 +64,7 @@ class OffboardControl(Node):
             depth=1
         )
 
-        csv_file = "/home/tommywoodley/ros2_px4_offboard_example_ws/src/ROS2_PX4_Offboard_Perching_Drone/px4_offboard/px4_offboard/traj_files/trajectory_1.csv"
+        csv_file = "/home/tommywoodley/ros2_px4_offboard_example_ws/src/ROS2_PX4_Offboard_Perching_Drone/px4_offboard/px4_offboard/traj_files/trajectory_test.csv"
 
         self.load_csv(csv_file)
 
@@ -146,7 +146,7 @@ class OffboardControl(Node):
         self.arm_message = False
         self.failsafe = False
         self.confirm = False
-        self.test = False
+        self.test = True
         self.vehicle_local_position = np.array([0.0, 0.0, 0.0])
         self.vehicle_local_velocity = np.array([0.0, 0.0, 0.0])
 
