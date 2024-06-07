@@ -146,6 +146,7 @@ class OffboardControl(Node):
         self.arm_message = False
         self.failsafe = False
         self.confirm = False
+        self.test = False
         self.vehicle_local_position = np.array([0.0, 0.0, 0.0])
         self.vehicle_local_velocity = np.array([0.0, 0.0, 0.0])
 
@@ -396,9 +397,9 @@ class OffboardControl(Node):
     
     def set_target_pos(self, position, update_velocity=True):
         self.get_logger().info(f"Setting target position z:{position['x']}, y:{position['y']}, z:{position['z']}")
-        self.target_position.x = float(position['x'])
-        self.target_position.y = float(position['y'])
-        self.target_position.z = - float(position['z'])
+        self.target_position.x = float(position['x'])    # Puts bar at 0
+        self.target_position.y = float(position['y'])    # Puts bar at 0
+        self.target_position.z = - float(position['z'])  # Puts the bar at 2.7
         self.current_time_steps = 0
 
         if update_velocity:
@@ -470,7 +471,17 @@ class OffboardControl(Node):
                 if time < 0:
                     self.get_logger().error(f"Out of time to reach next position time:{time}")
                 if self.has_reached_position(self.target_position):
-                    if self.phase_one:
+                    if self.test:
+                        if self.confirm:
+                            self.confirm = False
+                            self.csv_index += 1
+                            if self.csv_index >= len(self.data):
+                                self.current_traj_state = "DONE"
+                                return
+                            self.set_target_pos(self.data.iloc[self.csv_index])
+                            self.phase_one = bool(self.data.iloc[self.csv_index]['h'] == False)
+
+                    elif self.phase_one:
                         self.csv_index += 1
                         self.set_target_pos(self.data.iloc[self.csv_index])
                         self.phase_one = bool(self.data.iloc[self.csv_index]['h'] == False)
