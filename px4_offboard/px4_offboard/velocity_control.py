@@ -64,6 +64,7 @@ class OffboardControl(Node):
             depth=1
         )
 
+        # TODO: Update this with the chosen trajecotry file
         csv_file = "/home/tommywoodley/ros2_px4_offboard_example_ws/src/ROS2_PX4_Offboard_Perching_Drone/px4_offboard/px4_offboard/traj_files/trajectory_test.csv"
 
         self.load_csv(csv_file)
@@ -146,7 +147,7 @@ class OffboardControl(Node):
         self.arm_message = False
         self.failsafe = False
         self.confirm = False
-        self.test = True
+        self.test = False
         self.vehicle_local_position = np.array([0.0, 0.0, 0.0])
         self.vehicle_local_velocity = np.array([0.0, 0.0, 0.0])
 
@@ -159,8 +160,9 @@ class OffboardControl(Node):
         self.target_velocity.y = float('nan')
         self.target_velocity.z = float('nan')
         self.phase_one = True
+        self.counter = 0
         ########################################### CONTROLS EFFECTIVE SPEED OF DRONE - SET TO VERY VERY SLOW
-        self.time_period = 20.0
+        self.time_period = 0.2
         ########################################### CONTROLS EFFECTIVE SPEED OF DRONE - SET TO VERY VERY SLOW
         self.time_steps = int(self.time_period / timer_period)
         self.current_time_steps = 0
@@ -215,6 +217,7 @@ class OffboardControl(Node):
     #callback function that arms, takes off, and switches to offboard mode
     #implements a finite state machine
     def arm_timer_callback(self):
+        self.get_logger().info(f"Current State: {self.current_state}, Flight Check: {self.flightCheck}, Arm State: {self.arm_state}, Failsafe: {self.failsafe}, Nav State: {self.nav_state}")
 
         match self.current_state:
             case "IDLE":
@@ -244,10 +247,12 @@ class OffboardControl(Node):
             # waits in this state while taking off, and the 
             # moment VehicleStatus switches to Loiter state it will switch to offboard
             case "LOITER": 
+                self.offboardMode = False
                 if(not(self.flightCheck)):
                     self.current_state = "IDLE"
                     self.get_logger().info(f"Loiter, Flight Check Failed")
-                elif(self.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LOITER):
+                elif(self.nav_state == VehicleStatus.NAVIGATION_STATE_AUTO_LOITER) or self.confirm:
+                    self.confirm = False
                     self.current_state = "OFFBOARD"
                     self.get_logger().info(f"Loiter, Offboard")
                 self.arm()
@@ -257,6 +262,10 @@ class OffboardControl(Node):
                     self.current_state = "IDLE"
                     self.get_logger().info(f"Offboard, Flight Check Failed")
                 self.state_offboard()
+
+                if self.nav_state == VehicleStatus.NAVIGATION_STATE_POSCTL:
+                    self.current_state = "LOITER"
+                    self.get_logger().info(f"Posctl, Returning to IDLE")
 
         if(self.arm_state != VehicleStatus.ARMING_STATE_ARMED):
             self.arm_message = False
@@ -280,7 +289,7 @@ class OffboardControl(Node):
         self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_NAV_TAKEOFF, param1 = 1.0, param7=2.0) # param7 is altitude in meters
         self.get_logger().info("Takeoff command send")
 
-    def state_loiter(self):
+    def state_loiter(self): 
         self.myCnt = 0
         self.get_logger().info("Loiter Status")
 
@@ -397,9 +406,9 @@ class OffboardControl(Node):
     
     def set_target_pos(self, position, update_velocity=True):
         
-        self.target_position.x = float(position['x'] - 2.0)    # Puts bar at 0
+        self.target_position.x = float(position['x'] - 1.9)    # Puts bar at 0
         self.target_position.y = float(position['y'])    # Puts bar at 0
-        self.target_position.z = - float(position['z']) + 0.7 # Puts the bar at 2.7
+        self.target_position.z = - float(position['z']) + 1.0 # Puts the bar at 2.7
         self.get_logger().info(f"Setting target position {self.target_position} | {position['x']} | {position['y']}")
         self.current_time_steps = 0
 
