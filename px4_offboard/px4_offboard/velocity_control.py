@@ -147,7 +147,7 @@ class OffboardControl(Node):
         self.arm_message = False
         self.failsafe = False
         self.confirm = False
-        self.test = True
+        self.test = False
         self.vehicle_local_position = np.array([0.0, 0.0, 0.0])
         self.vehicle_local_velocity = np.array([0.0, 0.0, 0.0])
 
@@ -422,14 +422,15 @@ class OffboardControl(Node):
         
         self.trajectory_setpoint.x = float(position['x'] - 1.9)    # Puts bar at 0
         self.trajectory_setpoint.y = float(position['y'])    # Puts bar at 0
-        self.trajectory_setpoint.z = - float(position['z']) # + 1.0 # Puts the bar at 2.7
+        self.trajectory_setpoint.z = - float(position['z']) + 1.0 # Puts the bar at 2.7
         self.get_logger().info(f"Setting target position {self.trajectory_setpoint} | {position['x']} | {position['y']}")
         self.current_time_steps = 0
 
         if isEmpty:
-            self.prev_trajectory_setpoint.x = self.vehicle_local_position[0]
-            self.prev_trajectory_setpoint.y = - self.vehicle_local_position[1]
-            self.prev_trajectory_setpoint.z = - self.vehicle_local_position[2]
+            self.prev_trajectory_setpoint.x = 0.0
+            self.prev_trajectory_setpoint.y = 0.0
+            self.prev_trajectory_setpoint.z = - 2.0
+            self.get_logger().info(f"Setting prev_traj position {self.prev_trajectory_setpoint} |")
 
         if update_velocity:
             self.update_target_position()
