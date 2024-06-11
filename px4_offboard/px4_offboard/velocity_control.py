@@ -151,10 +151,21 @@ class OffboardControl(Node):
         self.vehicle_local_position = np.array([0.0, 0.0, 0.0])
         self.vehicle_local_velocity = np.array([0.0, 0.0, 0.0])
 
-        self.target_position = Vector3()
-        self.target_position.x = 0.0
-        self.target_position.y = 0.0
-        self.target_position.z = 0.0
+        self.prev_trajectory_setpoint = Vector3()
+        self.prev_trajectory_setpoint.x = 0.0
+        self.prev_trajectory_setpoint.y = 0.0
+        self.prev_trajectory_setpoint.z = 0.0
+
+        self.trajectory_setpoint = Vector3()
+        self.trajectory_setpoint.x = 0.0
+        self.trajectory_setpoint.y = 0.0
+        self.trajectory_setpoint.z = 0.0
+
+        self.target_setpoint = Vector3()
+        self.target_setpoint.x = 0.0
+        self.target_setpoint.y = 0.0
+        self.target_setpoint.z = 0.0
+
         self.target_velocity = Vector3()
         self.target_velocity.x = float('nan')
         self.target_velocity.y = float('nan')
@@ -404,36 +415,37 @@ class OffboardControl(Node):
         self.get_logger().info(f"Aim {target_position}, current: {current_position}, distance: {distance}, time: {self.time_steps}")
         return distance < threshold
     
-    def set_target_pos(self, position, update_velocity=True):
+    def set_trajectory_point(self, position, update_velocity=True):
         
-        self.target_position.x = float(position['x'] - 1.9)    # Puts bar at 0
-        self.target_position.y = float(position['y'])    # Puts bar at 0
-        self.target_position.z = - float(position['z']) + 1.0 # Puts the bar at 2.7
-        self.get_logger().info(f"Setting target position {self.target_position} | {position['x']} | {position['y']}")
+        self.prev_trajectory_setpoint.x = self.trajectory_setpoint.x
+        self.prev_trajectory_setpoint.y = self.trajectory_setpoint.y
+        self.prev_trajectory_setpoint.z = self.trajectory_setpoint.z
+        
+        self.trajectory_setpoint.x = float(position['x'] - 1.9)    # Puts bar at 0
+        self.trajectory_setpoint.y = float(position['y'])    # Puts bar at 0
+        self.trajectory_setpoint.z = - float(position['z']) + 1.0 # Puts the bar at 2.7
+        self.get_logger().info(f"Setting target position {self.trajectory_setpoint} | {position['x']} | {position['y']}")
         self.current_time_steps = 0
 
         if update_velocity:
-            self.update_target_velocity()
+            self.update_target_position()
 
     
-    def update_target_velocity(self):
+    def update_target_position(self):
 
-        time = (self.time_steps - self.current_time_steps) * self.timer_period
+        total_time_steps = self.time_steps
+        current_time_step = self.current_time_steps
 
-        distance_x = self.target_position.x - self.vehicle_local_position[0]
-        distance_y = self.target_position.y - self.vehicle_local_position[1]
-        distance_z = self.target_position.z + self.vehicle_local_position[2]
-
-        if time is not None and time >= (self.time_period / 3):
-            self.target_velocity.x = distance_x / time
-            self.target_velocity.y = distance_y / time
-            self.target_velocity.z = distance_z / time
+        if total_time_steps == 0 or current_time_step >= total_time_steps:
+            fraction = 1  # Avoid division by zero; default to full progress if total_time_steps is zero
         else:
-            self.target_velocity.x = float('nan')
-            self.target_velocity.y = float('nan')
-            self.target_velocity.z = float('nan')
+            fraction = current_time_step / total_time_steps
+
+        self.target_setpoint.x = self.prev_trajectory_setpoint.x + fraction * (self.trajectory_setpoint.x - self.prev_trajectory_setpoint.x)
+        self.target_setpoint.y = self.prev_trajectory_setpoint.y + fraction * (self.trajectory_setpoint.y - self.prev_trajectory_setpoint.y)
+        self.target_setpoint.z = self.prev_trajectory_setpoint.z + fraction * (self.trajectory_setpoint.z - self.prev_trajectory_setpoint.z)
         
-        return time
+        return total_time_steps - current_time_step
 
         
     #publishes offboard control modes and velocity as trajectory setpoints
@@ -466,7 +478,7 @@ class OffboardControl(Node):
                 if self.confirm:
                     self.current_traj_state = "MOVE_TO_START"
                     self.confirm = False
-                    self.set_target_pos(self.data.iloc[0], update_velocity=False)
+                    self.set_trajectory_point(self.data.iloc[0], update_velocity=False)
                 return
             
 
@@ -476,12 +488,12 @@ class OffboardControl(Node):
                     self.confirm = False
             
             elif self.current_traj_state in ["TRAJ_1", "TRAJ_2"]:
-                time = self.update_target_velocity()
                 self.current_time_steps += 1
+                time = self.update_target_position()
                 if time < 0:
                     self.get_logger().error(f"Out of time to reach next position time:{time}")
 
-                if self.has_reached_position(self.target_position):
+                if time <= 0:
                     if self.current_traj_state == "TRAJ_1" and self.test:
                         if self.confirm:
                             self.confirm = False
@@ -489,12 +501,12 @@ class OffboardControl(Node):
                             if self.csv_index >= len(self.data):
                                 self.current_traj_state = "DONE"
                                 return
-                            self.set_target_pos(self.data.iloc[self.csv_index])
+                            self.set_trajectory_point(self.data.iloc[self.csv_index])
                             self.phase_one = bool(self.data.iloc[self.csv_index]['h'] == False)
                     
                     elif self.current_traj_state == "TRAJ_1" and self.phase_one:
                         self.csv_index += 1
-                        self.set_target_pos(self.data.iloc[self.csv_index])
+                        self.set_trajectory_point(self.data.iloc[self.csv_index])
                         self.phase_one = bool(self.data.iloc[self.csv_index]['h'] == False)
                     
                     elif self.current_traj_state == "TRAJ_1" and not self.phase_one:
@@ -503,13 +515,12 @@ class OffboardControl(Node):
                             self.confirm = False
                     
                     elif self.current_traj_state == "TRAJ_2":
-                        if self.has_reached_position(self.target_position):
-                          self.csv_index += 1
+                        self.csv_index += 1
 
                         if self.csv_index >= len(self.data):
                             self.current_traj_state = "DONE"
                         else:
-                            self.set_target_pos(self.data.iloc[self.csv_index])
+                            self.set_trajectory_point(self.data.iloc[self.csv_index])
 
             elif self.current_traj_state == "DONE":
                 self.get_logger().info("Completed the trajectory!")
@@ -517,12 +528,12 @@ class OffboardControl(Node):
             else:
                 self.get_logger().info("Ended the trajectory!")
             
-            trajectory_msg.position[0] = self.target_position.x
-            trajectory_msg.position[1] = self.target_position.y
-            trajectory_msg.position[2] = self.target_position.z
-            trajectory_msg.velocity[0] = self.target_velocity.x
-            trajectory_msg.velocity[1] = self.target_velocity.y
-            trajectory_msg.velocity[2] = self.target_velocity.z
+            trajectory_msg.position[0] = self.target_setpoint.x
+            trajectory_msg.position[1] = self.target_setpoint.y
+            trajectory_msg.position[2] = self.target_setpoint.z
+            trajectory_msg.velocity[0] = float('nan')
+            trajectory_msg.velocity[1] = float('nan')
+            trajectory_msg.velocity[2] = float('nan')
 
             self.get_logger().info(f"MEssage Sending: {trajectory_msg}")
 
