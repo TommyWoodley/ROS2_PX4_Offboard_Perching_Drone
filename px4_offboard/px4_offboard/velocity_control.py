@@ -65,7 +65,7 @@ class OffboardControl(Node):
         )
 
         # TODO: Update this with the chosen trajecotry file
-        csv_file = "/home/tommywoodley/ros2_px4_offboard_example_ws/src/ROS2_PX4_Offboard_Perching_Drone/px4_offboard/px4_offboard/traj_files/trajectory_test.csv"
+        csv_file = "/home/tommywoodley/ros2_px4_offboard_example_ws/src/ROS2_PX4_Offboard_Perching_Drone/px4_offboard/px4_offboard/traj_files/trajectory_1.csv"
 
         self.load_csv(csv_file)
 
@@ -147,19 +147,13 @@ class OffboardControl(Node):
         self.arm_message = False
         self.failsafe = False
         self.confirm = False
-        self.test = False
+        self.test = True
         self.vehicle_local_position = np.array([0.0, 0.0, 0.0])
         self.vehicle_local_velocity = np.array([0.0, 0.0, 0.0])
 
-        self.prev_trajectory_setpoint = Vector3()
-        self.prev_trajectory_setpoint.x = 0.0
-        self.prev_trajectory_setpoint.y = 0.0
-        self.prev_trajectory_setpoint.z = 0.0
+        self.prev_trajectory_setpoint = None
 
-        self.trajectory_setpoint = Vector3()
-        self.trajectory_setpoint.x = 0.0
-        self.trajectory_setpoint.y = 0.0
-        self.trajectory_setpoint.z = 0.0
+        self.trajectory_setpoint = None
 
         self.target_setpoint = Vector3()
         self.target_setpoint.x = 0.0
@@ -173,7 +167,7 @@ class OffboardControl(Node):
         self.phase_one = True
         self.counter = 0
         ########################################### CONTROLS EFFECTIVE SPEED OF DRONE - SET TO VERY VERY SLOW
-        self.time_period = 0.2
+        self.time_period = 2.0
         ########################################### CONTROLS EFFECTIVE SPEED OF DRONE - SET TO VERY VERY SLOW
         self.time_steps = int(self.time_period / timer_period)
         self.current_time_steps = 0
@@ -416,6 +410,11 @@ class OffboardControl(Node):
         return distance < threshold
     
     def set_trajectory_point(self, position, update_velocity=True):
+
+        isEmpty = bool(self.prev_trajectory_setpoint is None)
+        if isEmpty:
+            self.prev_trajectory_setpoint = Vector3()
+            self.trajectory_setpoint = Vector3()
         
         self.prev_trajectory_setpoint.x = self.trajectory_setpoint.x
         self.prev_trajectory_setpoint.y = self.trajectory_setpoint.y
@@ -423,12 +422,21 @@ class OffboardControl(Node):
         
         self.trajectory_setpoint.x = float(position['x'] - 1.9)    # Puts bar at 0
         self.trajectory_setpoint.y = float(position['y'])    # Puts bar at 0
-        self.trajectory_setpoint.z = - float(position['z']) + 1.0 # Puts the bar at 2.7
+        self.trajectory_setpoint.z = - float(position['z']) # + 1.0 # Puts the bar at 2.7
         self.get_logger().info(f"Setting target position {self.trajectory_setpoint} | {position['x']} | {position['y']}")
         self.current_time_steps = 0
 
+        if isEmpty:
+            self.prev_trajectory_setpoint.x = self.vehicle_local_position[0]
+            self.prev_trajectory_setpoint.y = - self.vehicle_local_position[1]
+            self.prev_trajectory_setpoint.z = - self.vehicle_local_position[2]
+
         if update_velocity:
             self.update_target_position()
+        else:
+            self.target_setpoint.x = self.trajectory_setpoint.x
+            self.target_setpoint.y = self.trajectory_setpoint.y
+            self.target_setpoint.z = self.trajectory_setpoint.z
 
     
     def update_target_position(self):
@@ -451,6 +459,7 @@ class OffboardControl(Node):
     #publishes offboard control modes and velocity as trajectory setpoints
     def cmdloop_callback(self):
         if(self.offboardMode == True):
+            time = None
             # Publish offboard control modes
             offboard_msg = OffboardControlMode()
             offboard_msg.timestamp = int(Clock().now().nanoseconds / 1000)
@@ -503,6 +512,8 @@ class OffboardControl(Node):
                                 return
                             self.set_trajectory_point(self.data.iloc[self.csv_index])
                             self.phase_one = bool(self.data.iloc[self.csv_index]['h'] == False)
+                        else:
+                            self.get_logger().info("WAITING FOR TEST CONFIRM")
                     
                     elif self.current_traj_state == "TRAJ_1" and self.phase_one:
                         self.csv_index += 1
@@ -535,7 +546,7 @@ class OffboardControl(Node):
             trajectory_msg.velocity[1] = float('nan')
             trajectory_msg.velocity[2] = float('nan')
 
-            self.get_logger().info(f"MEssage Sending: {trajectory_msg}")
+            self.get_logger().info(f"MEssage Sending{time}: {trajectory_msg}")
 
             self.publisher_trajectory.publish(trajectory_msg)
 
