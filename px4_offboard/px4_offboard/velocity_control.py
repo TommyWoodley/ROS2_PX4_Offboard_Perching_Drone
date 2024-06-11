@@ -475,13 +475,14 @@ class OffboardControl(Node):
                     self.current_traj_state = "TRAJ_1"
                     self.confirm = False
             
-            elif self.current_traj_state == "TRAJ_1":
+            elif self.current_traj_state in ["TRAJ_1", "TRAJ_2"]:
                 time = self.update_target_velocity()
                 self.current_time_steps += 1
                 if time < 0:
                     self.get_logger().error(f"Out of time to reach next position time:{time}")
+
                 if self.has_reached_position(self.target_position):
-                    if self.test:
+                    if self.current_traj_state == "TRAJ_1" and self.test:
                         if self.confirm:
                             self.confirm = False
                             self.csv_index += 1
@@ -490,33 +491,28 @@ class OffboardControl(Node):
                                 return
                             self.set_target_pos(self.data.iloc[self.csv_index])
                             self.phase_one = bool(self.data.iloc[self.csv_index]['h'] == False)
-
-                    elif self.phase_one:
+                    
+                    elif self.current_traj_state == "TRAJ_1" and self.phase_one:
                         self.csv_index += 1
                         self.set_target_pos(self.data.iloc[self.csv_index])
                         self.phase_one = bool(self.data.iloc[self.csv_index]['h'] == False)
+                    
+                    elif self.current_traj_state == "TRAJ_1" and not self.phase_one:
+                        if self.confirm:
+                            self.current_traj_state = "TRAJ_2"
+                            self.confirm = False
+                    
+                    elif self.current_traj_state == "TRAJ_2":
+                        if self.has_reached_position(self.target_position):
+                          self.csv_index += 1
 
-                    elif self.confirm:
-                        self.current_traj_state = "TRAJ_2"
-                        self.confirm = False
-            
-            elif self.current_traj_state == "TRAJ_2":
-                time = self.update_target_velocity()
-                self.current_time_steps += 1
-                if time < 0:
-                    self.get_logger().error(f"Out of time to reach next position time:{time}")
+                        if self.csv_index >= len(self.data):
+                            self.current_traj_state = "DONE"
+                        else:
+                            self.set_target_pos(self.data.iloc[self.csv_index])
 
-                if self.has_reached_position(self.target_position):
-                    self.csv_index += 1
-
-                    if self.csv_index >= len(self.data):
-                        self.current_traj_state = "DONE"
-                    else:
-                        self.set_target_pos(self.data.iloc[self.csv_index])
-            
             elif self.current_traj_state == "DONE":
                 self.get_logger().info("Completed the trajectory!")
-                return
             
             else:
                 self.get_logger().info("Ended the trajectory!")
