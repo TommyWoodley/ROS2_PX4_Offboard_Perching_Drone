@@ -167,7 +167,7 @@ class OffboardControl(Node):
         self.phase_one = True
         self.counter = 0
         ########################################### CONTROLS EFFECTIVE SPEED OF DRONE - SET TO VERY VERY SLOW
-        self.time_period = 10.0
+        self.time_period = 1.0
         ########################################### CONTROLS EFFECTIVE SPEED OF DRONE - SET TO VERY VERY SLOW
         self.time_steps = int(self.time_period / timer_period)
         self.current_time_steps = 0
@@ -453,7 +453,16 @@ class OffboardControl(Node):
         self.target_setpoint.x = self.prev_trajectory_setpoint.x + fraction * (self.trajectory_setpoint.x - self.prev_trajectory_setpoint.x)
         self.target_setpoint.y = self.prev_trajectory_setpoint.y + fraction * (self.trajectory_setpoint.y - self.prev_trajectory_setpoint.y)
         self.target_setpoint.z = self.prev_trajectory_setpoint.z + fraction * (self.trajectory_setpoint.z - self.prev_trajectory_setpoint.z)
-        
+
+        if fraction < 0.5:
+            self.target_velocity.x = (self.trajectory_setpoint.x - self.vehicle_local_position[0]) / ((1 - fraction) * self.time_period)
+            self.target_velocity.y = (self.trajectory_setpoint.y - self.vehicle_local_position[1]) / ((1 - fraction) * self.time_period)
+            self.target_velocity.z = (self.trajectory_setpoint.z - self.vehicle_local_position[2]) / ((1 - fraction) * self.time_period)
+        else:
+            self.target_velocity.x = float('nan')
+            self.target_velocity.y = float('nan')
+            self.target_velocity.z = float('nan')
+
         return total_time_steps - current_time_step
 
         
@@ -546,9 +555,9 @@ class OffboardControl(Node):
             trajectory_msg.position[0] = self.target_setpoint.x
             trajectory_msg.position[1] = self.target_setpoint.y
             trajectory_msg.position[2] = self.target_setpoint.z
-            trajectory_msg.velocity[0] = float('nan')
-            trajectory_msg.velocity[1] = float('nan')
-            trajectory_msg.velocity[2] = float('nan')
+            trajectory_msg.velocity[0] = self.target_velocity.x
+            trajectory_msg.velocity[1] = self.target_velocity.y
+            trajectory_msg.velocity[2] = self.target_velocity.z
 
             self.get_logger().info(f"MEssage Sending{time}: {trajectory_msg}")
 
