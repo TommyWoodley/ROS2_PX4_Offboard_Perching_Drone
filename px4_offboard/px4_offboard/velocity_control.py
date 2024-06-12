@@ -167,7 +167,7 @@ class OffboardControl(Node):
         self.phase_one = True
         self.counter = 0
         ########################################### CONTROLS EFFECTIVE SPEED OF DRONE - SET TO VERY VERY SLOW
-        self.time_period = 2.0
+        self.time_period = 10.0
         ########################################### CONTROLS EFFECTIVE SPEED OF DRONE - SET TO VERY VERY SLOW
         self.time_steps = int(self.time_period / timer_period)
         self.current_time_steps = 0
@@ -525,6 +525,9 @@ class OffboardControl(Node):
                         if self.confirm:
                             self.current_traj_state = "TRAJ_2"
                             self.confirm = False
+                            self.time_period = 10.0
+                            ########################################### CONTROLS EFFECTIVE SPEED OF DRONE - SET TO VERY VERY SLOW
+                            self.time_steps = int(self.time_period / self.timer_period)
                     
                     elif self.current_traj_state == "TRAJ_2":
                         self.csv_index += 1
