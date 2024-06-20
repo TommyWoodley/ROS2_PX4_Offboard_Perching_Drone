@@ -197,6 +197,7 @@ then QGroundControl would run in a new tab of the terminal window and the QGroun
 Message Braden Wagstaff on the PX4 Discord for questions or email me at braden@arkelectron.com
 
 # Extra Steps that may be needed in a VM (Tommy Woodley)
+```bash
 export MESA_GL_VERSION_OVERRIDE=3.3
 export LIBGL_DRI3_DISABLE=1
 source /opt/ros/humble/setup.bash
@@ -204,3 +205,4 @@ colcon build
 source install/setup.bash
 colcon build --packages-select px4_offboard
 ros2 launch px4_offboard offboard_velocity_control.launch.py
+```
