@@ -1,6 +1,8 @@
 
 # ROS2_PX4_Offboard_Example
 
+This is an adapted version from the original forked repository.
+
 ## Overview
 This tutorial explains at a basic level how to use ROS2 and PX4 in order to control a simulated UAV's velocity with keyboard controls. The goal is to create a simple example that a complete beginner can follow and understand, even with no ROS2 or PX4 experience.
 
@@ -192,9 +194,6 @@ When closing the simulation, it is very tempting to just close the terminal wind
 ```
 then QGroundControl would run in a new tab of the terminal window and the QGroundControl GUI would then open up. This is commented out by default because it is not necessary for the simulation to run, but it is useful for debugging, and is a simple example showing how to add another command to the launch file.
 
-
-## Questions
-Message Braden Wagstaff on the PX4 Discord for questions or email me at braden@arkelectron.com
 
 # Extra Steps that may be needed in a VM (Tommy Woodley)
 ```bash
